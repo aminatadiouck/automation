@@ -1,0 +1,83 @@
+- name: create job in jenkins
+  hosts: localhost
+  vars:
+    jenkins_url: "http://192.168.15.115:8080"
+    jenkins_user: "admin"
+    jenkins_password: "{{ token }}"
+    jennkins_home: "/var/lib/jenkins"
+    
+    jenkins_job_name: "test-ansible-job"
+    git_repo_url: "https://github.com/heritage-africa/otp-auth-service.git"
+    git_credentials_id: "git-credentials-id"
+    git_branch: "main"
+    jenkinfile_path: "Jenkinsfile"
+  tasks:
+    - name: verifier la connexion à jenkins
+      uri:
+        url: "{{ jenkins_url }}"
+        method: GET
+        user: "{{ jenkins_user }}"
+        password: "{{ jenkins_password }}"
+
+    - name: creer repertoire du job
+      file:
+        path: "{{ jenkins_home }}/jobs/{{ jenkins_job_name }}"
+        state: directory
+        owner: jenkins
+        group: jenkins 
+        mode: '0755'
+    
+    - name: Déployer le config.xml du job
+      template:
+        src:  job_config.xml.j2
+        dest: "{{ jenkins_home }}/jobs/{{ jenkins_job_name }}/config.xml"
+        owner: jenkins
+        group: jenkins 
+        mode: '0644'
+    - name: Récupérer le crumb CSRF
+      uri:
+        url: "{{ jenkins_url }}/crumbIssuer/api/json"
+        method: GET
+        user: "{{ jenkins_user }}"
+        password: "{{ jenkins_token }}"
+        force_basic_auth: true
+        return_content: true
+      register: crumb_response
+
+    - name: Recharger la configuration Jenkins
+      uri:
+        url: "{{ jenkins_url }}/reload"
+        method: POST
+        user: "{{ jenkins_user }}"
+        password: "{{ jenkins_token }}"
+        force_basic_auth: true
+        headers:
+          Jenkins-Crumb: "{{ crumb_response.json.crumb }}"
+        status_code: 200, 302
+      when: job_exists.stat.exists
+
+    - name: Créer le job via l'API Jenkins (nouveau job)
+      uri:
+        url: "{{ jenkins_url }}/createItem?name={{ jenkins_job_name }}"
+        method: POST
+        user: "{{ jenkins_user }}"
+        password: "{{ jenkins_token }}"
+        force_basic_auth: true
+        headers:
+          Content-Type: "application/xml"
+          Jenkins-Crumb: "{{ crumb_response.json.crumb }}"
+        body: "{{ lookup('template', 'templates/config.xml.j2') }}"
+        status_code: 200, 302
+      when: not job_exists.stat.exists
+    
+    - name: Confirmation
+      debug:
+        msg: "✅ Job '{{ jenkins_job_name }}' créé/mis à jour avec succès !"
+
+
+
+
+        
+      
+
+      
